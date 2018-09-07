@@ -1,0 +1,32 @@
+{
+  "l1":
+  {
+    "link": "link/to/l1/results",
+    "output": "results-ligue1.csv",
+    "format": 1
+  },
+  "c1":
+  {
+    "link": "link/to/c1/results",
+    "output": "results-c1.csv",
+    "format": 1
+  },
+  "nl":
+  {
+    "link": "link/to/nl/results",
+    "output": "results-nl.csv",
+    "format": 1
+  },
+  "top14":
+  {
+    "link": "link/to/top14/results",
+    "output": "results-top14.csv",
+    "format": 2
+  },
+  "nba":
+  {
+    "link": "link/to/nba/results",
+    "output": "results-nba.csv",
+    "format": 2
+  }
+}

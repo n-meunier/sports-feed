@@ -1,27 +1,76 @@
-from BeautifulSoup import BeautifulSoup
+#!/usr/bin/env python
+# coding: utf8
+# =============================================================================
+#            Nicolas Meunier
+# =============================================================================
+# PROJECT : Sports results feeder
+# FILE : sports_feed.py
+# DESCRIPTION :
+"""
+    From specific websites, get sports results on leagues selected from a
+    configuration file.
+
+Use: python sports_feed.py -l [LEAGUE]
+
+Requirements:
+- BeautifulSoup
+- pandas
+
+========= ============== ======================================================
+Version   Date           Comment
+========= ============== ======================================================
+0.1.0     2018/09/05     Initial version
+0.2.0     2018/09/05     Updated: Factorize in functions
+0.3.0     2018/09/07     Added: Read leagues info from config file. Optional
+                         argument to select the league.
+0.4.0     2018/09/07     Changed: Read leagues info from json file.
+========= ============== ======================================================
+"""
+
+# [IMPORTS]--------------------------------------------------------------------
+try:
+    from BeautifulSoup import BeautifulSoup
+except:
+    from bs4 import BeautifulSoup
 import re
 import os
 import urllib2
 import pandas as pd
 from datetime import datetime, date, timedelta
-import ConfigParser
+import ConfigParser, argparse
+import json
 
+# [MODULE INFO]----------------------------------------------------------------
+__author__ = 'nmeunier'
+__date__ = '2018/09/07'
+__version__ = '0.3.0'
+
+# [GLOBALS]--------------------------------------------------------------------
 pattern = r'javascript:pop.*,\'(.*)-vs-(.*)\/(\d{2}-\d{2}-\d{4})\''
 col = ['date', 'team-home', 'team-away', 'score-home', 'score-away']
-
-config = ConfigParser.ConfigParser()
-config.read('sports_config.cfg')
-LINK_LIGUE1 = config.get('links', 'link_ligue1')
-LINK_TOP14 = config.get('links', 'link_top14')
-LINK_NBA = config.get('links', 'link_nba')
-LINK_C1 = config.get('links', 'link_c1')
 
 yesterday = date.today() - timedelta(4)
 yesterday_format = yesterday.strftime('%a %d %b %Y')
 y_df_format = yesterday.strftime('%d-%m-%Y')
 
 
-# -------------------- FUNCTIONS ------------------------------------------------
+# [FUNCTIONS] -----------------------------------------------------------------
+def read_leagues_info():
+    """Read a config file to get the link, the output path and the html
+    format for each league.
+    :return: dictionary of leagues.
+    """
+    leagues = {}
+
+    config = ConfigParser.ConfigParser()
+    config.read('sports_config.cfg')
+
+    with open('sports-config.json') as f:
+        leagues = json.load(f)
+
+    return leagues
+
+
 def get_results_1(link, df):
     """ Return a dataframe with the game results on from a link with data in
     format 1.
@@ -131,52 +180,123 @@ def get_results_2(link, df):
     return df
 
 
-# -------------------- MAIN -----------------------------------------------------
-# FOOT - Ligue 1
-csv_file = os.path.abspath(os.path.dirname(__file__)) + '/results-ligue1.csv'
-if os.path.isfile(csv_file):
-    df_ligue1 = pd.read_csv(csv_file, sep=';', index_col=0)
-else:
-    df_ligue1 = pd.DataFrame(columns=col)
+# [MAIN] ----------------------------------------------------------------------
+def main():
+    """Main function"""
 
-df_ligue1 = get_results_1(LINK_LIGUE1, df_ligue1)
-print df_ligue1
+    # Parse command line argument
+    aadhf = argparse.ArgumentDefaultsHelpFormatter
+    parser = argparse.ArgumentParser(description="Get sports results from the "
+                                                 "web.",
+                                     formatter_class=aadhf)
 
-df_ligue1.to_csv('results-ligue1.csv', sep=';', encoding='utf-8')
+    parser.add_argument('-l', '--leagues', dest='leagues', default='all',
+                        help='Sports leagues targeted:'
+                             '- l1: Ligue 1 (football)'
+                             '- c1: UEFA Champions League (football)'
+                             '- nl: UEFA Nations League (football)'
+                             '- top14: Top 14 (rugby)'
+                             '- nba: NBA (basketball)'
+                             '- all: All leagues above (default)')
 
-# FOOT - Champions League
-csv_file = os.path.abspath(os.path.dirname(__file__)) + '/results-c1.csv'
-if os.path.isfile(csv_file):
-    df_c1 = pd.read_csv(csv_file, sep=';', index_col=0)
-else:
-    df_c1 = pd.DataFrame(columns=col)
+    args = parser.parse_args()
 
-df_c1 = get_results_1(LINK_C1, df_c1)
-print df_c1
+    all_leagues = read_leagues_info()
 
-df_c1.to_csv('results-c1.csv', sep=';', encoding='utf-8')
+    # Get the leagues to check
+    if args.leagues in all_leagues:
+        leagues = {args.leagues: all_leagues[args.leagues]}
+    elif args.leagues == 'all':
+        print('All the leagues will be checked.')
+        leagues = all_leagues
+    else:
+        print('The league you are asking is not available. Fallback to the '
+              'default ones.')
+        leagues = all_leagues
 
-# RUGBY - Top14
-csv_file = os.path.abspath(os.path.dirname(__file__)) + '/results-top14.csv'
-if os.path.isfile(csv_file):
-    df_top14 = pd.read_csv(csv_file, sep=';', index_col=0)
-else:
-    df_top14 = pd.DataFrame(columns=col)
+    print leagues
+    for league in leagues:
+        csv_file = os.path.abspath(os.path.dirname(__file__)) + '/' + \
+                   leagues[league]['output']
+        print csv_file
+        if os.path.isfile(csv_file):
+            df = pd.read_csv(csv_file, sep=';', index_col=0)
+        else:
+            df = pd.DataFrame(columns=col)
 
-df_top14 = get_results_2(LINK_TOP14, df_top14)
+        if leagues[league]['format'] == 1:
+            print('format 1')
+            df = get_results_1(leagues[league]['link'], df)
+        elif leagues[league]['format'] == 2:
+            print('format 2')
+            df = get_results_2(leagues[league]['link'], df)
+        print df
 
-print df_top14
-df_top14.to_csv('results-top14.csv', sep=';', encoding='utf-8')
+        df.to_csv(leagues[league]['output'], sep=';', encoding='utf-8')
+
+    # FOOT - Ligue 1
+    # csv_file = os.path.abspath(os.path.dirname(__file__)) + '/' + \
+    #            LEAGUES_LIST['l1']['output']
+    # print csv_file
+    # if os.path.isfile(csv_file):
+    #     df_ligue1 = pd.read_csv(csv_file, sep=';', index_col=0)
+    # else:
+    #     df_ligue1 = pd.DataFrame(columns=col)
+    #
+    # df_ligue1 = get_results_1(LINK_LIGUE1, df_ligue1)
+    # print df_ligue1
+    #
+    # df_ligue1.to_csv('results-ligue1.csv', sep=';', encoding='utf-8')
+    #
+    # # FOOT - Champions League
+    # csv_file = os.path.abspath(os.path.dirname(__file__)) + '/results-c1.csv'
+    # if os.path.isfile(csv_file):
+    #     df_c1 = pd.read_csv(csv_file, sep=';', index_col=0)
+    # else:
+    #     df_c1 = pd.DataFrame(columns=col)
+    #
+    # df_c1 = get_results_1(LINK_C1, df_c1)
+    # print df_c1
+    #
+    # df_c1.to_csv('results-c1.csv', sep=';', encoding='utf-8')
+    #
+    # # FOOT - Nations League
+    # csv_file = os.path.abspath(os.path.dirname(__file__)) + '/results-nl.csv'
+    # if os.path.isfile(csv_file):
+    #     df_nl = pd.read_csv(csv_file, sep=';', index_col=0)
+    # else:
+    #     df_nl = pd.DataFrame(columns=col)
+    #
+    # df_nl = get_results_1(LINK_NL, df_nl)
+    # print df_nl
+    #
+    # df_nl.to_csv('results-nl.csv', sep=';', encoding='utf-8')
+    #
+    # # RUGBY - Top14
+    # csv_file = os.path.abspath(os.path.dirname(__file__)) + '/results-top14.csv'
+    # if os.path.isfile(csv_file):
+    #     df_top14 = pd.read_csv(csv_file, sep=';', index_col=0)
+    # else:
+    #     df_top14 = pd.DataFrame(columns=col)
+    #
+    # df_top14 = get_results_2(LINK_TOP14, df_top14)
+    #
+    # print df_top14
+    # df_top14.to_csv('results-top14.csv', sep=';', encoding='utf-8')
+    #
+    #
+    # # BASKET - NBA
+    # csv_file = os.path.abspath(os.path.dirname(__file__)) + '/results-nba.csv'
+    # if os.path.isfile(csv_file):
+    #     df_nba = pd.read_csv(csv_file, sep=';', index_col=0)
+    # else:
+    #     df_nba = pd.DataFrame(columns=col)
+    #
+    # df_nba = get_results_2(LINK_NBA, df_nba)
+    #
+    # print df_nba
+    # df_nba.to_csv('results-nba.csv', sep=';', encoding='utf-8')
 
 
-# BASKET - NBA
-csv_file = os.path.abspath(os.path.dirname(__file__)) + '/results-nba.csv'
-if os.path.isfile(csv_file):
-    df_nba = pd.read_csv(csv_file, sep=';', index_col=0)
-else:
-    df_nba = pd.DataFrame(columns=col)
-
-df_nba = get_results_2(LINK_NBA, df_nba)
-
-print df_nba
-df_nba.to_csv('results-nba.csv', sep=';', encoding='utf-8')
+if __name__ == '__main__':
+    main()
