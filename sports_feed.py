@@ -24,6 +24,8 @@ Version   Date           Comment
 0.3.0     2018/09/07     Added: Read leagues info from config file. Optional
                          argument to select the league.
 0.4.0     2018/09/07     Changed: Read leagues info from json file.
+0.6.0     2018/09/10     Added: Optional argument to only display the
+                         previous day
 ========= ============== ======================================================
 """
 
@@ -42,16 +44,16 @@ import json
 
 # [MODULE INFO]----------------------------------------------------------------
 __author__ = 'nmeunier'
-__date__ = '2018/09/07'
-__version__ = '0.3.0'
+__date__ = '2018/09/10'
+__version__ = '0.6.0'
 
 # [GLOBALS]--------------------------------------------------------------------
 pattern = r'javascript:pop.*,\'(.*)-vs-(.*)\/(\d{2}-\d{2}-\d{4})\''
 col = ['date', 'team-home', 'team-away', 'score-home', 'score-away']
 
-yesterday = date.today() - timedelta(4)
+yesterday = date.today() - timedelta(1)
 yesterday_format = yesterday.strftime('%a %d %b %Y')
-y_df_format = yesterday.strftime('%d-%m-%Y')
+y_df_format = yesterday.strftime('%Y-%m-%d')
 
 
 # [FUNCTIONS] -----------------------------------------------------------------
@@ -82,7 +84,7 @@ def get_results_1(link, df):
     soup = BeautifulSoup(page)
 
     for t in soup.findAll('p', text=re.compile("(\w{3} \d{2} \w{3} \d{4})")):
-        date = datetime.strptime(t, '%a %d %b %Y').strftime('%d-%m-%Y')
+        date = datetime.strptime(t, '%a %d %b %Y').strftime('%Y-%m-%d')
         # print date
 
         try:
@@ -118,7 +120,7 @@ def get_results_1(link, df):
             print('No data for %s' % str(date))
             print(error)
 
-    df = df.drop_duplicates(['date', 'team-home']).reset_index(drop=True)
+    # df = df.drop_duplicates(['date', 'team-home']).reset_index(drop=True)
     return df
 
 
@@ -133,7 +135,7 @@ def get_results_2(link, df):
     soup = BeautifulSoup(page)
 
     for t in soup.findAll('p', text=re.compile("(\w{3} \d{2} \w{3} \d{4})")):
-        date = datetime.strptime(t, '%a %d %b %Y').strftime('%d-%m-%Y')
+        date = datetime.strptime(t, '%a %d %b %Y').strftime('%Y-%m-%d')
 
     # foundtext = soup.find('p', text=yesterday_format)
         try:
@@ -176,7 +178,7 @@ def get_results_2(link, df):
         except AttributeError as error:
             print('No data for %s' % str(date))
             print(error)
-    df = df.drop_duplicates(['date', 'team-home']).reset_index(drop=True)
+    # df = df.drop_duplicates(['date', 'team-home']).reset_index(drop=True)
     return df
 
 
@@ -198,8 +200,15 @@ def main():
                              '- top14: Top 14 (rugby)'
                              '- nba: NBA (basketball)'
                              '- all: All leagues above (default)')
+    parser.add_argument('-y', '--yesterday', action='store_true',
+                        help='Show only yesterday\'s results')
 
     args = parser.parse_args()
+
+    if args.yesterday:
+        yesterday_only = True
+    else:
+        yesterday_only = False
 
     all_leagues = read_leagues_info()
 
@@ -214,24 +223,34 @@ def main():
               'default ones.')
         leagues = all_leagues
 
-    print leagues
+    # print leagues
     for league in leagues:
+        print('\n' + leagues[league]['name'] + ':')
         csv_file = os.path.abspath(os.path.dirname(__file__)) + '/' + \
                    leagues[league]['output']
-        print csv_file
         if os.path.isfile(csv_file):
             df = pd.read_csv(csv_file, sep=';', index_col=0)
         else:
             df = pd.DataFrame(columns=col)
 
         if leagues[league]['format'] == 1:
-            print('format 1')
             df = get_results_1(leagues[league]['link'], df)
         elif leagues[league]['format'] == 2:
-            print('format 2')
             df = get_results_2(leagues[league]['link'], df)
-        print df
-
+        df = df.sort_values(by=['date']).drop_duplicates(['date',
+                                                          'team-home']).reset_index(drop=True)
+        if yesterday_only:
+            print('Yesterday:')
+            df_yesterday = df.loc[df['date'] == y_df_format]
+            if len(df_yesterday.index) > 0:
+                print(df_yesterday)
+            else:
+                print('No results found')
+        else:
+            if len(df.index) > 0:
+                print df
+            else:
+                print('No results found')
         df.to_csv(leagues[league]['output'], sep=';', encoding='utf-8')
 
     # FOOT - Ligue 1
