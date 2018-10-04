@@ -31,6 +31,9 @@ Version   Date           Comment
                          (before or after)
                          Added: Get the data from the web only if the results
                          are not available locally
+0.9.0     2018/10/04     Added: Get the round. Changed: Merge all the output
+                         into one csv. Merge the functions to get results and
+                         fixtures into one.
 ========= ============== ======================================================
 """
 
@@ -49,12 +52,14 @@ import json
 
 # [MODULE INFO]----------------------------------------------------------------
 __author__ = 'nmeunier'
-__date__ = '2018/09/17'
-__version__ = '0.8.0'
+__date__ = '2018/10/04'
+__version__ = '0.9.0'
 
 # [GLOBALS]--------------------------------------------------------------------
 pattern = r'javascript:pop.*,\'(.*)-vs-(.*)\/(\d{2}-\d{2}-\d{4})\''
-col = ['date', 'team-home', 'team-away', 'score-home', 'score-away']
+# col = ['date', 'team-home', 'team-away', 'score-home', 'score-away']
+col = ['date', 'time', 'status', 'team-home', 'team-away', 'score-home',
+       'score-away', 'round', 'sport', 'league']
 
 
 # [FUNCTIONS] -----------------------------------------------------------------
@@ -88,7 +93,7 @@ def get_data(link, type):
         return False
 
 
-def get_results_1(link, df):
+def get_games(link, df, sport, league, results=True):
     """ Return a dataframe with the game results on from a link with data in
     format 1.
     :param link: url to the website
@@ -98,208 +103,108 @@ def get_results_1(link, df):
     # link = link + 'results/'
     # page = urllib2.urlopen(link).read()
     # soup = BeautifulSoup(page)
-
-    soup = get_data(link, 'results')
-
-    if not soup:
-        return False
-
-    for t in soup.findAll('p', text=re.compile("(\w{3} \d{2} \w{3} \d{4})")):
-        date = datetime.strptime(t, '%a %d %b %Y').strftime('%Y-%m-%d')
-        # print date
-
-        try:
-            div = t.findNext('div')
-            for table in div.findAll('table'):
-                for p in table.findAll('span'):
-                    if p.get('title'):
-                        if 'AOT' in p.text or 'FT' in p.text:
-                            # print p.text
-                            # print 'game'
-                            game = p.findParent('tr')
-                            for q in game.findAll('td'):
-                                # print q
-                                if q.get('class') and 'home' in q.get('class'):
-                                    hteam = q.text
-                                    # print('team-home: %s' % hteam)
-                                if q.get('class') and 'away' in q.get('class'):
-                                    ateam = q.text
-                                    # print('team-away: %s' % ateam)
-                                if q.get('class') and 'score' in q.get('class'):
-                                    score = re.match('(\d) - (\d)', q.text)
-                                    hscore = score.group(1)
-                                    ascore = score.group(2)
-                                    # print('score-home: %s' % hscore)
-                                    # print('score-away: %s' % ascore)
-                            df = df.append({'date': date,
-                                            'team-home': hteam,
-                                            'team-away': ateam,
-                                            'score-home': hscore,
-                                            'score-away': ascore},
-                                           ignore_index=True)
-        except AttributeError as error:
-            print('No data for %s' % str(date))
-            print(error)
-
-    return df
-
-
-def get_schedule_1(link, df):
-    """ Return a dataframe with the game results on from a link with data in
-    format 1.
-    :param link: url to the website
-    :param df: Dataframe to fill
-    :return: updated dataframe
-    """
-    soup = get_data(link, 'fixtures')
+    if results:
+        soup = get_data(link, 'results')
+    else:
+        soup = get_data(link, 'fixtures')
 
     if not soup:
         return False
 
-    for t in soup.findAll('p', text=re.compile("(\w{3} \d{2} \w{3} \d{4})")):
-        date = datetime.strptime(t, '%a %d %b %Y').strftime('%Y-%m-%d')
-        # print date
+    # For all div
+    for ncet in soup.findAll('div'):
+        # Get only the 'ncet' div
+        if ncet.get('class') and 'ncet' in ncet.get('class'):
+            round_number = ''
+            game_date = ''
+            game_time = ''
+            # Get the round and date if available
+            for t in ncet.findAll('li'):
+                if t.get('class') and 'round' in t.get('class'):
+                    match = re.match('(Round|Matchday) (\d+)', t.text)
+                    if match:
+                        round_number = match.group(2)
+                    else:
+                        round_number = t.text
+                if t.get('class') and 'date' in t.get('class'):
+                    game_date = datetime.strptime(t.text, '%a %d %b %Y').strftime('%Y-%m-%d')
 
-        try:
-            div = t.findNext('div')
-            for table in div.findAll('table'):
-                for p in table.findAll('span'):
-                    if p.get('title'):
-                        hteam = ''
-                        ateam = ''
-                        hscore = ''
-                        ascore = ''
-                        game = p.findParent('tr')
-                        for q in game.findAll('td'):
-                            # print q
+            try:
+                # Games data are in the div after round and date
+                div = t.findNext('div')
+                for table in div.findAll('table'):
+                    hteam = ''
+                    ateam = ''
+                    hscore = ''
+                    ascore = ''
+                    status = ''
+                    # One game per 1 or 2 table row
+                    for team in table.findAll('tr'):
+                        # For each table cell, find the corresponding data
+                        for q in team.findAll('td'):
+                            if q.get('class') and 'datetime' in q.get('class'):
+                                game_time = q.text
+                            if q.get('class') and 'kick_t' in q.get('class'):
+                                for span in q.findAll('span'):
+                                    if span.get('class') and 'dt' in \
+                                            span.get('class'):
+                                        game_date = datetime.strptime(span.text,
+                                                                      '%d.%m.%y').strftime('%Y-%m-%d')
+                                    elif span.get('class') and 'ko' in \
+                                            span.get('class'):
+                                        game_time = span.text
+                            if q.get('class') and 'status' in q.get('class'):
+                                status = q.text
                             if q.get('class') and 'home' in q.get('class'):
                                 hteam = q.text
-                                # print('team-home: %s' % hteam)
+                                if ';' in hteam:
+                                    hteam = hteam.split(';', 1)[1]
                             if q.get('class') and 'away' in q.get('class'):
                                 ateam = q.text
-                                # print('team-away: %s' % ateam)
-                        df = df.append({'date': date,
-                                        'team-home': hteam,
-                                        'team-away': ateam,
-                                        'score-home': hscore,
-                                        'score-away': ascore},
-                                       ignore_index=True)
-        except AttributeError as error:
-            print('No data for %s' % str(date))
-            print(error)
+                                if ';' in ateam:
+                                    ateam = ateam.split(';', 1)[1]
+                            if q.get('class') and 'score' in q.get('class'):
+                                score = re.match('(\d+) - (\d+)', q.text)
+                                if score:
+                                    hscore = score.group(1)
+                                    ascore = score.group(2)
+                            if q.get('class') and 'setB' in q.get('class') \
+                                    and not hscore:
+                                hscore = q.text
+                                if ';' in hscore:
+                                    hscore = hscore.split(';', 1)[1]
+                        # If away team was not found in the row, must be a 2
+                        # rows game
+                        if not ateam:
+                            away_team = team.findNext('tr')
+                            for q in away_team.findAll('td'):
+                                if q.get('class') and 'away' in q.get('class'):
+                                    ateam = q.text
+                                    if ';' in ateam:
+                                        ateam = ateam.split(';', 1)[1]
+                                if q.get('class') and 'setB' in q.get('class'):
+                                    ascore = q.text
+                                    if ';' in ascore:
+                                        ascore = ascore.split(';', 1)[1]
+                    # print('[%s %s] Round %s: (%s) %s %s - %s %s' %
+                    #       (game_date, game_time, round_number, status, hteam,
+                    #        hscore, ascore, ateam))
 
-    return df
-
-
-def get_results_2(link, df):
-    """ Return a dataframe with the game results on from a link with data in
-    format 2.
-    :param link: url to the website
-    :param df: Dataframe to fill
-    :return: updated dataframe
-    """
-    soup = get_data(link, 'results')
-
-    if not soup:
-        return False
-
-    for t in soup.findAll('p', text=re.compile("(\w{3} \d{2} \w{3} \d{4})")):
-        date = datetime.strptime(t, '%a %d %b %Y').strftime('%Y-%m-%d')
-
-        try:
-            # div = foundtext.findNext('div')
-            div = t.findNext('div')
-            # table = foundtext.findNext('table')
-            for table in div.findAll('table'):
-                for p in table.findAll('span'):
-                    if p.get('title'):
-                        if 'AOT' in p.text or 'FT' in p.text:
-                            # time = p.text
-                            # print p.text
-                            team_1 = p.findParent('tr')
-                            # print 'TEAM 1'
-                            # print team_1
-                            for q in team_1.findAll('td'):
-                                # print q
-                                if q.get('class') and 'hometeam' in q.get('class'):
-                                    hteam = (re.match('.*;(.*)', q.text)).group(1)
-                                    # print('team-home: %s' % hteam)
-                                if q.get('class') and 'ts_setB' in q.get('class'):
-                                    hscore = (re.match('.*;(\d+)', q.text)).group(1)
-                                    # print('score-home: %s' % hscore)
-                            team_2 = team_1.findNext('tr')
-                            # print 'TEAM 2'
-                            # print team_2
-                            for q in team_2.findAll('td'):
-                                # print q
-                                if q.get('class') and 'awayteam' in q.get('class'):
-                                    ateam = (re.match('.*;(.*)', q.text)).group(1)
-                                    # print('team-away: %s' % ateam)
-                                if q.get('class') and 'ts_setB' in q.get('class'):
-                                    ascore = (re.match('.*;(\d+)', q.text)).group(1)
-                                    # print('score-away: %s' % ascore)
-                            df = df.append({'date': date,
-                                            'team-home': hteam,
-                                            'team-away': ateam,
-                                            'score-home': hscore,
-                                            'score-away': ascore},
-                                           ignore_index=True)
-        except AttributeError as error:
-            print('No data for %s' % str(date))
-            print(error)
-
-    return df
-
-
-def get_schedule_2(link, df):
-    """ Return a dataframe with the game schedule from a link with data in
-    format 2.
-    :param link: url to the website
-    :param df: Dataframe to fill
-    :return: updated dataframe
-    """
-    soup = get_data(link, 'fixtures')
-
-    if not soup:
-        return False
-
-    for t in soup.findAll('p', text=re.compile("(\w{3} \d{2} \w{3} \d{4})")):
-        # print t
-        date = datetime.strptime(t, '%a %d %b %Y').strftime('%Y-%m-%d')
-
-        try:
-            # div = foundtext.findNext('div')
-            div = t.findNext('div')
-            # print div
-            # table = foundtext.findNext('table')
-            for table in div.findAll('table'):
-                # print table
-                # print 'GAME'
-                hteam = ''
-                ateam = ''
-                hscore = ''
-                ascore = ''
-                for team in table.findAll('tr'):
-                    # print 'TEAM 1'
-                    # print team
-                    for q in team.findAll('td'):
-                        # print q
-                        if q.get('class') and 'hometeam' in q.get('class'):
-                            hteam = (re.match('.*;(.*)', q.text)).group(1)
-                            # print('team-home: %s' % hteam)
-                            # print('score-home: %s' % hscore)
-                        if q.get('class') and 'awayteam' in q.get('class'):
-                            ateam = (re.match('.*;(.*)', q.text)).group(1)
-                            # print('team-away: %s' % ateam)
-                df = df.append({'date': date,
-                                'team-home': hteam,
-                                'team-away': ateam,
-                                'score-home': hscore,
-                                'score-away': ascore},
-                               ignore_index=True)
-        except AttributeError as error:
-            print('No data for %s' % str(date))
-            print(error)
+                    # Append to the dataframe
+                    df = df.append({'date': game_date,
+                                    'time': game_time,
+                                    'status': status,
+                                    'team-home': hteam,
+                                    'team-away': ateam,
+                                    'score-home': hscore,
+                                    'score-away': ascore,
+                                    'round': round_number,
+                                    'sport': sport,
+                                    'league': league},
+                                   ignore_index=True)
+            except AttributeError as error:
+                print('No data for %s' % str(game_date))
+                print(error)
 
     return df
 
@@ -315,7 +220,8 @@ def main():
                                      formatter_class=aadhf)
 
     parser.add_argument('-l', '--league', dest='league', default='all',
-                        help='League targeted:'
+                        help='League targeted (must be defined in the config '
+                             'file). Ex:'
                              '- l1: Ligue 1 (football)'
                              '- c1: UEFA Champions League (football)'
                              '- nl: UEFA Nations League (football)'
@@ -366,8 +272,7 @@ def main():
     # print leagues
     for league in leagues:
         print('\n' + leagues[league]['name'] + ':')
-        csv_file = os.path.abspath(os.path.dirname(__file__)) + '/' + \
-                   leagues[league]['output']
+        csv_file = os.path.abspath(os.path.dirname(__file__)) + '/results.csv'
         if os.path.isfile(csv_file):
             df = pd.read_csv(csv_file, sep=';', index_col=0)
         else:
@@ -379,17 +284,20 @@ def main():
             df_date = df.loc[df['date'] < (date.today()).strftime('%Y-%m-%d')]
 
         # if there is games but no results, get the results
-        if df_date.isnull().values.any() or len(df_date.index) < 1:
+        if df_date.isnull().values.any() or len(df_date.index) < 1 or not \
+                leagues[league]['name'] in df_date['league']:
             print('Get the results...')
-            if leagues[league]['format'] == 1:
-                df = get_results_1(leagues[league]['link'], df)
-                df = get_schedule_1(leagues[league]['link'], df)
-            elif leagues[league]['format'] == 2:
-                df = get_results_2(leagues[league]['link'], df)
-                df = get_schedule_2(leagues[league]['link'], df)
-            df = df.sort_values(by=['date']).drop_duplicates(['date',
-                                                              'team-home']).reset_index(drop=True)
-            df.to_csv(leagues[league]['output'], sep=';', encoding='utf-8')
+            df = get_games(leagues[league]['link'], df,
+                           leagues[league]['sport'], leagues[league]['name'],
+                           results=True)
+            df = get_games(leagues[league]['link'], df,
+                           leagues[league]['sport'], leagues[league]['name'],
+                           results=False)
+            df_sort = df.sort_values(by=['status'])
+            df = df_sort.drop_duplicates(['date', 'team-home'],
+                                         keep='first').reset_index(drop=True)
+            # df.to_csv(leagues[league]['output'], sep=';', encoding='utf-8')
+            df.to_csv('results.csv', sep=';', encoding='utf-8')
             df_date = df.loc[df['date'] == check_date]
 
         print('%s:' % check_date)

@@ -1,32 +1,32 @@
 {
   "l1":
   {
+    "name": "Ligue 1 Conforama",
     "link": "link/to/l1/results",
-    "output": "results-ligue1.csv",
-    "format": 1
+    "sport": "football"
   },
   "c1":
   {
+    "name": "UEFA Champions League",
     "link": "link/to/c1/results",
-    "output": "results-c1.csv",
-    "format": 1
+    "sport": "football"
   },
   "nl":
   {
+    "name": "UEFA Nations League",
     "link": "link/to/nl/results",
-    "output": "results-nl.csv",
-    "format": 1
+    "sport": "football"
   },
   "top14":
   {
+    "name": "Top 14",
     "link": "link/to/top14/results",
-    "output": "results-top14.csv",
-    "format": 2
+    "sport": "rugby"
   },
   "nba":
   {
+    "name": "NBA",
     "link": "link/to/nba/results",
-    "output": "results-nba.csv",
-    "format": 2
+    "sport": "basketball"
   }
 }
