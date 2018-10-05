@@ -36,6 +36,7 @@ Version   Date           Comment
                          fixtures into one.
 0.10.0    2018/10/05     Added: Get the results from web only if passed games
                          have no result or there is no game from today
+0.11.0    2018/10/05     Added: option to check by matchday
 ========= ============== ======================================================
 """
 
@@ -55,7 +56,7 @@ import json
 # [MODULE INFO]----------------------------------------------------------------
 __author__ = 'nmeunier'
 __date__ = '2018/10/05'
-__version__ = '0.10.0'
+__version__ = '0.11.0'
 
 # [GLOBALS]--------------------------------------------------------------------
 TODAY = (date.today()).strftime('%Y-%m-%d')
@@ -213,58 +214,15 @@ def get_games(link, df, sport, league, results=True):
 
 
 # [MAIN] ----------------------------------------------------------------------
-def main():
+def main(check_date=None, league='all', matchday=None):
     """Main function"""
-
-    # Parse command line argument
-    aadhf = argparse.ArgumentDefaultsHelpFormatter
-    parser = argparse.ArgumentParser(description="Get sports results from the "
-                                                 "web.",
-                                     formatter_class=aadhf)
-
-    parser.add_argument('-l', '--league', dest='league', default='all',
-                        help='League targeted (must be defined in the config '
-                             'file). Ex:'
-                             '- l1: Ligue 1 (football)'
-                             '- c1: UEFA Champions League (football)'
-                             '- nl: UEFA Nations League (football)'
-                             '- top14: Top 14 (rugby)'
-                             '- nba: NBA (basketball)'
-                             '- all: All leagues above (default)')
-    parser.add_argument('-d', '--date', dest='date', default=None,
-                        help='Show only results for the day given (format '
-                             'YYYY-mm-dd, ex: 2018-09-17). Default is all the '
-                             'dates until yesterday.'
-                             'Possibility to give \'yesterday\', \'today\' or '
-                             '\'tomorrow\'.'
-                             'If the date is today or later, give the schedule.')
-
-    args = parser.parse_args()
-
-    if args.date:
-        if args.date == 'yesterday':
-            check_date = (date.today() - timedelta(1)).strftime('%Y-%m-%d')
-        elif args.date == 'today':
-            check_date = (date.today()).strftime('%Y-%m-%d')
-        elif args.date == 'tomorrow':
-            check_date = (date.today() + timedelta(1)).strftime('%Y-%m-%d')
-        else:
-            m = re.match('(\d{4}-\d{2}-\d{2})', args.date)
-            if m:
-                check_date = m.group(1)
-            else:
-                print('Cannot read the date, fallback to default value: all.')
-                check_date = None
-    else:
-        print('No date, will show all the previous results.')
-        check_date = None
 
     all_leagues = read_leagues_info()
 
     # Get the leagues to check
-    if args.league in all_leagues:
+    if league in all_leagues:
         leagues = {args.league: all_leagues[args.league]}
-    elif args.league == 'all':
+    elif league == 'all':
         print('All the leagues will be checked.')
         leagues = all_leagues
     else:
@@ -309,12 +267,14 @@ def main():
             # df.to_csv(leagues[league]['output'], sep=';', encoding='utf-8')
 
         # if the optional date is provided
+        df_request = df.loc[df['league'] == leagues[league]['name']]
         if check_date:
-            df_request = df.loc[df['date'] == check_date]
+            df_request = df_request.loc[df['date'] == check_date]
+        elif matchday:
+            df_request = df_request[df_request['round'].str.contains(matchday)]
         else:
             today = (date.today()).strftime('%Y-%m-%d')
-            df_request = df.loc[df['date'] < today]
-        df_request = df_request.loc[df['league'] == leagues[league]['name']]
+            df_request = df_request.loc[df['date'] < today]
 
         print('%s:' % check_date)
         if len(df_request.index) > 0:
@@ -326,4 +286,50 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+
+    # Parse command line argument
+    aadhf = argparse.ArgumentDefaultsHelpFormatter
+    parser = argparse.ArgumentParser(description="Get sports results from the "
+                                                 "web.",
+                                     formatter_class=aadhf)
+
+    parser.add_argument('-l', '--league', dest='league', default='all',
+                        help='League targeted (must be defined in the config '
+                             'file). Ex:'
+                             '- l1: Ligue 1 (football)'
+                             '- c1: UEFA Champions League (football)'
+                             '- nl: UEFA Nations League (football)'
+                             '- top14: Top 14 (rugby)'
+                             '- nba: NBA (basketball)'
+                             '- all: All leagues above (default)')
+    parser.add_argument('-d', '--date', dest='date', default=None,
+                        help='Show only results for the day given (format '
+                             'YYYY-mm-dd, ex: 2018-09-17). Default is all the '
+                             'dates until yesterday.'
+                             'Possibility to give \'yesterday\', \'today\' or '
+                             '\'tomorrow\'.'
+                             'If the date is today or later, give the schedule.')
+    parser.add_argument('-m', '--matchday', dest='matchday', default=None,
+                        help='Show only results for the matchday given')
+
+    args = parser.parse_args()
+
+    if args.date:
+        if args.date == 'yesterday':
+            check_date = (date.today() - timedelta(1)).strftime('%Y-%m-%d')
+        elif args.date == 'today':
+            check_date = (date.today()).strftime('%Y-%m-%d')
+        elif args.date == 'tomorrow':
+            check_date = (date.today() + timedelta(1)).strftime('%Y-%m-%d')
+        else:
+            m = re.match('(\d{4}-\d{2}-\d{2})', args.date)
+            if m:
+                check_date = m.group(1)
+            else:
+                print('Cannot read the date, fallback to default value: all.')
+                check_date = None
+    else:
+        print('No date, will show all the previous results.')
+        check_date = None
+
+    main(check_date, args.league, args.matchday)
