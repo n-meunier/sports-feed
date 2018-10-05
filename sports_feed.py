@@ -34,6 +34,8 @@ Version   Date           Comment
 0.9.0     2018/10/04     Added: Get the round. Changed: Merge all the output
                          into one csv. Merge the functions to get results and
                          fixtures into one.
+0.10.0    2018/10/05     Added: Get the results from web only if passed games
+                         have no result or there is no game from today
 ========= ============== ======================================================
 """
 
@@ -52,10 +54,11 @@ import json
 
 # [MODULE INFO]----------------------------------------------------------------
 __author__ = 'nmeunier'
-__date__ = '2018/10/04'
-__version__ = '0.9.0'
+__date__ = '2018/10/05'
+__version__ = '0.10.0'
 
 # [GLOBALS]--------------------------------------------------------------------
+TODAY = (date.today()).strftime('%Y-%m-%d')
 pattern = r'javascript:pop.*,\'(.*)-vs-(.*)\/(\d{2}-\d{2}-\d{4})\''
 # col = ['date', 'team-home', 'team-away', 'score-home', 'score-away']
 col = ['date', 'time', 'status', 'team-home', 'team-away', 'score-home',
@@ -269,23 +272,30 @@ def main():
               'default ones.')
         leagues = all_leagues
 
+    csv_file = os.path.abspath(os.path.dirname(__file__)) + '/results.csv'
+    if os.path.isfile(csv_file):
+        df = pd.read_csv(csv_file, sep=';', index_col=0)
+    else:
+        df = pd.DataFrame(columns=col)
+
     # print leagues
     for league in leagues:
         print('\n' + leagues[league]['name'] + ':')
-        csv_file = os.path.abspath(os.path.dirname(__file__)) + '/results.csv'
-        if os.path.isfile(csv_file):
-            df = pd.read_csv(csv_file, sep=';', index_col=0)
-        else:
-            df = pd.DataFrame(columns=col)
 
-        if check_date:
-            df_date = df.loc[df['date'] == check_date]
-        else:
-            df_date = df.loc[df['date'] < (date.today()).strftime('%Y-%m-%d')]
+        df_league = df.loc[df['league'] == leagues[league]['name']]
+
+        # Get data from the web initialized to False
+        check_needed = False
+        df_test = df_league.loc[df['date'] < TODAY]
+
+        # if league is not in the dataframe OR previous games are not \
+        #         up-to-date OR there is no games from today
+        if len(df_league) < 1 or len(df_league.loc[df['date'] >= TODAY]) < 1 or\
+                (df_league.loc[df['date'] < TODAY])['status'].isnull().values.any():
+            check_needed = True
 
         # if there is games but no results, get the results
-        if df_date.isnull().values.any() or len(df_date.index) < 1 or not \
-                leagues[league]['name'] in df_date['league']:
+        if check_needed:
             print('Get the results...')
             df = get_games(leagues[league]['link'], df,
                            leagues[league]['sport'], leagues[league]['name'],
@@ -297,14 +307,22 @@ def main():
             df = df_sort.drop_duplicates(['date', 'team-home'],
                                          keep='first').reset_index(drop=True)
             # df.to_csv(leagues[league]['output'], sep=';', encoding='utf-8')
-            df.to_csv('results.csv', sep=';', encoding='utf-8')
-            df_date = df.loc[df['date'] == check_date]
+
+        # if the optional date is provided
+        if check_date:
+            df_request = df.loc[df['date'] == check_date]
+        else:
+            today = (date.today()).strftime('%Y-%m-%d')
+            df_request = df.loc[df['date'] < today]
+        df_request = df_request.loc[df['league'] == leagues[league]['name']]
 
         print('%s:' % check_date)
-        if len(df_date.index) > 0:
-            print(df_date)
+        if len(df_request.index) > 0:
+            print(df_request)
         else:
             print('No results found')
+
+    df.to_csv('results.csv', sep=';', encoding='utf-8')
 
 
 if __name__ == '__main__':
