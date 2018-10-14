@@ -1,4 +1,3 @@
-- Get the data only one time per day, then only read the local data: add last update date to the csv name
 - Add a force get optional parameter if need to get the data from the web more than once a day
 - Have options to crawl the csv files with filters
 - Have posiblity to check from - to

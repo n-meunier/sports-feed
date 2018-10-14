@@ -37,6 +37,7 @@ Version   Date           Comment
 0.10.0    2018/10/05     Added: Get the results from web only if passed games
                          have no result or there is no game from today
 0.11.0    2018/10/05     Added: option to check by matchday
+0.11.1    2018/10/14     Fixed: Exception on the url get
 ========= ============== ======================================================
 """
 
@@ -48,6 +49,7 @@ except:
 import re
 import os
 import urllib2
+from httplib import IncompleteRead
 import pandas as pd
 from datetime import datetime, date, timedelta
 import ConfigParser, argparse
@@ -55,8 +57,8 @@ import json
 
 # [MODULE INFO]----------------------------------------------------------------
 __author__ = 'nmeunier'
-__date__ = '2018/10/05'
-__version__ = '0.11.0'
+__date__ = '2018/10/14'
+__version__ = '0.11.1'
 
 # [GLOBALS]--------------------------------------------------------------------
 TODAY = (date.today()).strftime('%Y-%m-%d')
@@ -91,7 +93,10 @@ def get_data(link, type):
     """
     if type == 'results' or type == 'fixtures':
         link = link + type
-        page = urllib2.urlopen(link).read()
+        try:
+            page = urllib2.urlopen(link).read()
+        except IncompleteRead, e:
+            page = e.partial
         return BeautifulSoup(page)
     else:
         return False
