@@ -1,0 +1,13 @@
+#! /bin/bash
+# Trace in logfile
+echo "----------------------------------------" >> ~/PATH/TO/LOGFILE/cron_sports-feed.log
+echo "$(date "+%Y-%m-%d %H:%M:%S")" >> ~/PATH/TO/LOGFILE/cron_sports-feed.log
+
+# Activate virtual env
+source ~/.virtualenvs/sports-feed/bin/activate
+
+# Run the script
+python ~/PATH/TO/SCRIPT/sports_feed.py 2>> ~/PATH/TO/LOGFILE/cron_sports-feed.log
+
+# Convert to HTML table
+csvtotable ~/PATH/TO/OUTPUT/results.csv ~/PATH/TO/HTML_OUTPUT/feed.html -d ';' -o -c 'Sports Feed'

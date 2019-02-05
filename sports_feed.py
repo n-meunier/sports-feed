@@ -59,14 +59,14 @@ import json
 __author__ = 'nmeunier'
 __date__ = '2018/10/14'
 __version__ = '0.11.1'
+__link__ = 'https://github.com/n-meunier/sports-feed'
 
 # [GLOBALS]--------------------------------------------------------------------
 TODAY = (date.today()).strftime('%Y-%m-%d')
 pattern = r'javascript:pop.*,\'(.*)-vs-(.*)\/(\d{2}-\d{2}-\d{4})\''
-# col = ['date', 'team-home', 'team-away', 'score-home', 'score-away']
 col = ['date', 'time', 'status', 'team-home', 'team-away', 'score-home',
        'score-away', 'round', 'sport', 'league']
-
+PATH = os.path.dirname(os.path.realpath(__file__))
 
 # [FUNCTIONS] -----------------------------------------------------------------
 def read_leagues_info():
@@ -77,9 +77,9 @@ def read_leagues_info():
     leagues = {}
 
     config = ConfigParser.ConfigParser()
-    config.read('sports_config.cfg')
+    config.read(PATH + '/sports_config.cfg')
 
-    with open('sports-config.json') as f:
+    with open(PATH + '/sports-config.json') as f:
         leagues = json.load(f)
 
     return leagues
@@ -103,15 +103,15 @@ def get_data(link, type):
 
 
 def get_games(link, df, sport, league, results=True):
-    """ Return a dataframe with the game results on from a link with data in
-    format 1.
+    """ Return a dataframe with the game results from a link.
     :param link: url to the website
     :param df: Dataframe to fill
+    :param sport: Sport to check
+    :param league: League to check
+    :param results: Select between results and fixtures
     :return: updated dataframe
     """
-    # link = link + 'results/'
-    # page = urllib2.urlopen(link).read()
-    # soup = BeautifulSoup(page)
+
     if results:
         soup = get_data(link, 'results')
     else:
@@ -136,7 +136,8 @@ def get_games(link, df, sport, league, results=True):
                     else:
                         round_number = t.text
                 if t.get('class') and 'date' in t.get('class'):
-                    game_date = datetime.strptime(t.text, '%a %d %b %Y').strftime('%Y-%m-%d')
+                    extract_date = datetime.strptime(t.text, '%a %d %b %Y')
+                    game_date = extract_date.strftime('%Y-%m-%d')
 
             try:
                 # Games data are in the div after round and date
@@ -155,10 +156,11 @@ def get_games(link, df, sport, league, results=True):
                                 game_time = q.text
                             if q.get('class') and 'kick_t' in q.get('class'):
                                 for span in q.findAll('span'):
-                                    if span.get('class') and 'dt' in \
-                                            span.get('class'):
-                                        game_date = datetime.strptime(span.text,
-                                                                      '%d.%m.%y').strftime('%Y-%m-%d')
+                                    if span.get('class') and \
+                                            'dt' in span.get('class'):
+                                        d = datetime.strptime(span.text,
+                                                              '%d.%m.%y')
+                                        game_date = d.strftime('%Y-%m-%d')
                                     elif span.get('class') and 'ko' in \
                                             span.get('class'):
                                         game_time = span.text
@@ -249,7 +251,6 @@ def main(check_date=None, league='all', matchday=None):
 
         # Get data from the web initialized to False
         check_needed = False
-        df_test = df_league.loc[df['date'] < TODAY]
 
         # if league is not in the dataframe OR previous games are not \
         #         up-to-date OR there is no games from today
@@ -283,11 +284,13 @@ def main(check_date=None, league='all', matchday=None):
 
         print('%s:' % check_date)
         if len(df_request.index) > 0:
-            print(df_request)
+            print(df_request[['date', 'time', 'status', 'team-home',
+                              'team-away', 'score-home', 'score-away',
+                              'round']])
         else:
             print('No results found')
 
-    df.to_csv('results.csv', sep=';', encoding='utf-8')
+    df.to_csv(PATH + '/results.csv', sep=';', encoding='utf-8')
 
 
 if __name__ == '__main__':
